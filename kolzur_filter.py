@@ -25,6 +25,7 @@ https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Zurbenko_filter
 """
 
 import numpy as np
+from scipy.linalg import circulant
 
 __author__ = 'Mathieu Schopfer'
 __version__ = '2017-03-31'
@@ -163,11 +164,15 @@ def _kz_coeffs(m, k):
     # Iterate k-1 times over coefficients
     for i in range(1, k):
 
-        t = np.zeros((m, m+i*(m-1)))
-        for km in range(m):
-            t[km, km:km+coef.size] = coef
+        t = np.zeros(m + i*(m-1))
+        t[:len(coef)] =  coef
 
-        coef = np.sum(t, axis=0)
+        coef = np.sum(circulant(t).T[:m], axis=0)
+        # t = np.zeros((m, m+i*(m-1)))
+        # for km in range(m):
+        #     t[km, km:km+coef.size] = coef
+
+        # coef = np.sum(t, axis=0)
 
     assert coef.size == k*(m-1)+1
 
