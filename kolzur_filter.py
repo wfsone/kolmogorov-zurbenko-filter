@@ -27,8 +27,8 @@ https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Zurbenko_filter
 import numpy as np
 from scipy.linalg import circulant
 
-__author__ = 'Mathieu Schopfer'
-__version__ = '2017-03-31'
+__author__ = "Mathieu Schopfer"
+__version__ = "2017-03-31"
 
 
 def sliding_window(arr, window):
@@ -68,7 +68,7 @@ def sliding_window(arr, window):
     """
 
     # Advanced numpy tricks
-    shape = arr.shape[:-1] + (arr.shape[-1]-window+1, window)
+    shape = arr.shape[:-1] + (arr.shape[-1] - window + 1, window)
     strides = arr.strides + (arr.strides[-1],)
     return np.lib.stride_tricks.as_strided(arr, shape=shape, strides=strides)
 
@@ -164,8 +164,9 @@ def _kz_coeffs(m, k):
     # Iterate k-1 times over coefficients
     for i in range(1, k):
 
-        t = np.zeros(m + i*(m-1))
-        t[:len(coef)] =  coef
+        t = np.zeros((m, m + i * (m - 1)))
+        for km in range(m):
+            t[km, km : km + coef.size] = coef
 
         coef = np.sum(circulant(t).T[:m], axis=0)
         # t = np.zeros((m, m+i*(m-1)))
@@ -174,23 +175,23 @@ def _kz_coeffs(m, k):
 
         # coef = np.sum(t, axis=0)
 
-    assert coef.size == k*(m-1)+1
+    assert coef.size == k * (m - 1) + 1
 
-    return coef/m**k
+    return coef / m ** k
 
 
 def _kz_prod(data, coef, m, k, t=None):
 
     n = data.size
-    data = sliding_window(data, k*(m-1)+1)
-    assert data.shape == (n-k*(m-1), len(coef))
+    data = sliding_window(data, k * (m - 1) + 1)
+    assert data.shape == (n - k * (m - 1), len(coef))
 
     # Restrict KZ product calculation to provided indices
     if t is not None:
         data = data[t]
         assert data.shape == (len(t), len(coef))
 
-    return data*coef
+    return data * coef
 
 
 def _kz_sum(data, coef):
@@ -200,7 +201,9 @@ def _kz_sum(data, coef):
     # Handle missing values if any
     if np.any(knan):
 
-        coef = np.ma.MaskedArray(np.broadcast_to(coef[np.newaxis, :], data.shape), mask=knan)
+        coef = np.ma.MaskedArray(
+            np.broadcast_to(coef[np.newaxis, :], data.shape), mask=knan
+        )
         coef = np.sum(coef, axis=-1)
 
         data = np.nansum(data, axis=-1)
@@ -210,7 +213,7 @@ def _kz_sum(data, coef):
 
         # Divide by coefficients sum, which may not be 1
         k = np.logical_not(coef.mask)
-        data[k] = data[k]/coef[k]
+        data[k] = data[k] / coef[k]
 
         return data
 
@@ -242,7 +245,7 @@ def kz_filter(data, m, k):
     return _kz_sum(data, coef)
 
 
-def kzft(data, nu, m, k, t=None, dt=1.):
+def kzft(data, nu, m, k, t=None, dt=1.0):
     """Kolmogorov-Zurbenko Fourier transform filter
 
     :param numpy.ndarray data: A 1-dimensional numpy array of size `N`. Any missing value should be set to ``np.nan``.
@@ -267,34 +270,37 @@ def kzft(data, nu, m, k, t=None, dt=1.):
         e^{-2\\pi i\\nu s}
     """
 
-    if not dt == 1.:
-        nu = np.asarray(nu)*dt
-        m = int((m-1)/dt+1)
-        if not m%2:
+    if not dt == 1.0:
+        nu = np.asarray(nu) * dt
+        m = int((m - 1) / dt + 1)
+        if not m % 2:
             m += 1
 
     if t is not None:
-        w = int(k*(m-1)/2)
-        t = np.asarray(t)-w
-        if np.any(t < 0) or np.any(t > (data.size-1-2*w)):
-            raise IndexError('Inpunt calculation indices are out of range. Calculation indices should be in the range '
-                             '[k*(m-1)/2, (N-1)-k*(m-1)/2], hence [{}, {}] in the present case.'
-                             .format(w, data.size-1-w))
+        w = int(k * (m - 1) / 2)
+        t = np.asarray(t) - w
+        if np.any(t < 0) or np.any(t > (data.size - 1 - 2 * w)):
+            raise IndexError(
+                "Inpunt calculation indices are out of range. Calculation indices should be in the range "
+                "[k*(m-1)/2, (N-1)-k*(m-1)/2], hence [{}, {}] in the present case.".format(
+                    w, data.size - 1 - w
+                )
+            )
 
     coef = _kz_coeffs(m, k)
     data = _kz_prod(data, coef, m, k, t=t)
 
     nu = np.asarray(nu)
-    s = k*(m-1)/2
-    s = np.arange(-s, s+1)
-    s = np.exp(-1j*2*np.pi*nu[:, np.newaxis]*s)
+    s = k * (m - 1) / 2
+    s = np.arange(-s, s + 1)
+    s = np.exp(-1j * 2 * np.pi * nu[:, np.newaxis] * s)
 
-    data = data[np.newaxis]*s[:, np.newaxis]
+    data = data[np.newaxis] * s[:, np.newaxis]
 
     return _kz_sum(data, coef)
 
 
-def kzp(data, nu, m, k, dt=1.):
+def kzp(data, nu, m, k, dt=1.0):
     """Kolmogorov-Zurbenko periodogram
 
     :param numpy.ndarray data: A 1-dimensional numpy array of size `N`. Any missing value should be set to ``np.nan``.
@@ -316,21 +322,40 @@ def kzp(data, nu, m, k, dt=1.):
     The assumption was made that :math:`L \\ll w \\ll N`, implying that the intervals overlap.
     """
 
-    if not dt == 1.:
-        nu = nu*dt
-        m = int((m-1)/dt+1)
-        if not m%2:
+    if not dt == 1.0:
+        nu = nu * dt
+        m = int((m - 1) / dt + 1)
+        if not m % 2:
             m += 1
 
     # w is the width of the KZFT. As m is odd, k*(m-1) is always even, so w is always odd.
-    w = k*(m-1)+1
+    w = k * (m - 1) + 1
 
     # Distance between two successve intervals
-    l = int(m/10)
-    nt = int((data.size-w)/l+1)
+    l = int(m / 10)
+    nt = int((data.size - w) / l + 1)
 
     # Calculation indices
-    l = np.arange(nt-1)*l+k*(m-1)/2
+    l = np.arange(nt - 1) * l + k * (m - 1) / 2
     l = np.floor(l).astype(int)
 
-    return np.sqrt(np.nanmean(np.square(2*np.abs(kzft(data, nu, m, k, t=l))), axis=-1))
+    return np.sqrt(
+        np.nanmean(np.square(2 * np.abs(kzft(data, nu, m, k, t=l))), axis=-1)
+    )
+
+def kzp_smooth(kz_pg, threshhold=0.01):
+    N = len(kz_pg)
+    K = len(kz_pg)
+    S = np.diff(kz_pg**2, 0)
+
+    sq = np.zeros((N, K))
+
+    for i in range(N):
+        for j in range(1, K):
+            sq[i, j] = np.sum(S[np.max((0, i-j)):np.min((N, i+j-1))])
+
+    total = np.sum(S)
+    cc = threshhold * total
+    mi = [np.sum(sq[i] <= cc) for i in range(len(sq))]
+
+    return [np.mean(kz_pg[np.max((0,i-mi[i])):np.min((N,i+mi[i]))]) for i in range(len(mi))]
