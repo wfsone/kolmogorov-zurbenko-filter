@@ -25,6 +25,7 @@ https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Zurbenko_filter
 """
 
 import numpy as np
+from scipy.linalg import circulant
 
 __author__ = "Mathieu Schopfer"
 __version__ = "2017-03-31"
@@ -163,11 +164,15 @@ def _kz_coeffs(m, k):
     # Iterate k-1 times over coefficients
     for i in range(1, k):
 
-        t = np.zeros((m, m + i * (m - 1)))
-        for km in range(m):
-            t[km, km : km + coef.size] = coef
 
-        coef = np.sum(t, axis=0)
+        t = np.zeros(m + i*(m-1))
+        t[:len(coef)] = coef
+        coef = np.sum(circulant(t).T[:m], axis=0)
+        # t = np.zeros((m, m+i*(m-1)))
+        # for km in range(m):
+        #     t[km, km:km+coef.size] = coef
+
+        # coef = np.sum(t, axis=0)
 
     assert coef.size == k * (m - 1) + 1
 
@@ -336,3 +341,20 @@ def kzp(data, nu, m, k, dt=1.0):
     return np.sqrt(
         np.nanmean(np.square(2 * np.abs(kzft(data, nu, m, k, t=l))), axis=-1)
     )
+
+def kzp_smooth(kz_pg, threshhold=0.01):
+    N = len(kz_pg)
+    K = len(kz_pg)
+    S = np.diff(kz_pg**2, 0)
+
+    sq = np.zeros((N, K))
+
+    for i in range(N):
+        for j in range(1, K):
+            sq[i, j] = np.sum(S[np.max((0, i-j)):np.min((N, i+j-1))])
+
+    total = np.sum(S)
+    cc = threshhold * total
+    mi = [np.sum(sq[i] <= cc) for i in range(len(sq))]
+
+    return [np.mean(kz_pg[np.max((0,i-mi[i])):np.min((N,i+mi[i]))]) for i in range(len(mi))]
