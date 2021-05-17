@@ -165,8 +165,7 @@ def _kz_coeffs(m, k):
     for i in range(1, k):
 
         t = np.zeros((m, m + i * (m - 1)))
-        for km in range(m):
-            t[km, km : km + coef.size] = coef
+        t[:len(coef)] =  coef
 
         coef = np.sum(circulant(t).T[:m], axis=0)
         # t = np.zeros((m, m+i*(m-1)))
